@@ -101,8 +101,8 @@ ENV/
 .mypy_cache/
 
 # Pollster
-.zip
-.mp4
-.xps
-.png
-.jpg
+*.zip
+*.mp4
+*.xps
+*.png
+*.jpg
