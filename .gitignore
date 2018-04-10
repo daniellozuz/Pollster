@@ -102,3 +102,7 @@ ENV/
 
 # Pollster
 .zip
+.mp4
+.xps
+.png
+.jpg
