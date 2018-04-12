@@ -9,70 +9,38 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 
-
-i = 0
-frame_list = []
-V_list = []
-
-
-#Choosing source of input
-#cap = cv2.VideoCapture(0)
-
-cap = cv2.VideoCapture("ank4.mp4"); 
-
-while(True):
-    i += 1
-    if  not(i % 5):
-      
-        #Capturing every 10th frame
+def CaptureFrame ():
+    i = 0
+    frame_list = []
+    V_list = []
+    
+    
+    #Choosing source of input
+    
+    #cap = cv2.VideoCapture(0)
+    
+    cap = cv2.VideoCapture("ankieta_OK.avi"); 
+    
+    while(True):
+        i += 1
+    #   skoro chcecie kazda ramke
+    #    if  not(i % 5): 
         ret, frame = cap.read()
         if ret == 1 :
-            cv2.imshow('frame',frame)
-            # Aggregating frame
-            frame_list.append(frame)
-            
+    
             #Converting image to HSV
             frame_HSV = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            cv2.imshow('HSV',frame_HSV)
+            V = np.mean(frame_HSV[:,:,2])
             #Aggregating V-values
-            V_list.append(np.mean(frame_HSV[:,:,2]))
-
-            #        if V_list[-1] < lower_limit
-#            break
+            V_list.append(V)
+            if V>80 and i>10 and np.sum(np.square(V - V_list[-10:-2]))<1:
+                break
+    
         else:
             break
             
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    #plt.plot(V_list)
+    cap.release()
+    cv2.destroyAllWindows()
+    return frame
 
-# When everything done, release the capture
-cap.release()
-cv2.destroyAllWindows()
-
-V = []
-for j in range(2,(len(V_list) - 3)):
-    V.append(V_list[j] - 5*np.sum (np.square (V_list[j] - V_list[j-2:j+2])))
-
-
-index_max_V = V.index(max(V))
-I = frame_list[index_max_V+2]
-
-cv2.imshow("MAX V VALUE",I)
-plt.plot(V_list)
-
-plt.show()
-
-
-
-#cap2 = cv2.VideoCapture("ank4.mp4"); 
-#
-#while(True):
-#    i += 1
-#    if  not(i % 5):
-#        if i == 52:
-#        #Capturing every 10th frame
-#            ret, frame = cap2.read()
-#        if ret == 1 :
-#            cv2.imshow('frame',frame)
-#
-#        break
