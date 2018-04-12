@@ -33,10 +33,10 @@ def CaptureFrame ():
             V_list.append(V)
             if IsCaptured == 0 and V>80 and i>10 and np.sum(np.square(V - V_list[-10:-2]))<1:
                 #pipe.send(frame)
+                V_list.clear
                 IsCaptured = 1
             if IsCaptured == 1 and V < 10:
                 IsCaptured = 0
-                
         else:
             break
             
