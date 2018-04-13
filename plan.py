@@ -27,16 +27,18 @@ class ImageProducer(object):
     def produce(self, pipe_parent):
         index = count()
         while True:
-            _, image = self.cap.read()
-            if image is not None:
-                cv2.imshow('Live display', image)
-                if next(index) % 20 == 0:
-                    pipe_parent.send(image)
-                    print('SENT image.')
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                self.cap.release()
-                pipe_parent.send('STOP')
+            more, image = self.cap.read()
+            if not more:
                 break
+            cv2.imshow('Live display', image)
+            if next(index) % 20 == 0:
+                pipe_parent.send(image)
+                print('SENT image.')
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            print('x')
+        self.cap.release()
+        pipe_parent.send('STOP')
 
 
 class ImageConsumer(object):
@@ -48,9 +50,9 @@ class ImageConsumer(object):
                 break
             print("RECEIVED image, processing...")
             cv2.imshow('Processing results', image)
-            for _ in range(10000000):
-                continue
             cv2.waitKey(1)
+            for _ in range(100000):
+                continue
             print('Finished processing image.')
 
 
@@ -74,4 +76,4 @@ class Pollster(object):
 
 
 if __name__ == '__main__':
-    Pollster().run(input_stream=WEBCAM, camera_settings=CAMERA_SETTINGS)
+    Pollster().run(input_stream='src_video/after_cam_seq.avi', camera_settings=CAMERA_SETTINGS)
