@@ -24,19 +24,25 @@ class ImageProducer(object):
         for option, value in camera_settings.items():
             self.cap.set(option, value)
 
-    def produce(self, pipe_parent):
+    def frame_generator(self, step=1, show_every_frame=False):
         index = count()
         while True:
             more, image = self.cap.read()
             if not more:
-                break
-            cv2.imshow('Live display', image)
-            if next(index) % 20 == 0:
+                return
+            if show_every_frame:
+                cv2.imshow('Live display', image)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    return
+            i = next(index)
+            if i % step == 0:
+                yield i, image
+
+    def produce(self, pipe_parent):
+        for index, image in self.frame_generator(step=2, show_every_frame=True):
+            if index % 20 == 0: # Decide when to snapshot (poll recognition)
                 pipe_parent.send(image)
                 print('SENT image.')
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-            print('x')
         self.cap.release()
         pipe_parent.send('STOP')
 
@@ -76,4 +82,4 @@ class Pollster(object):
 
 
 if __name__ == '__main__':
-    Pollster().run(input_stream='src_video/after_cam_seq.avi', camera_settings=CAMERA_SETTINGS)
+    Pollster().run(input_stream=WEBCAM, camera_settings=CAMERA_SETTINGS)
