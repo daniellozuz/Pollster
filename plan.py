@@ -2,6 +2,8 @@ import multiprocessing
 import cv2
 import time
 from itertools import count
+import numpy as np
+from collections import deque
 
 
 WEBCAM = 0
@@ -15,63 +17,75 @@ CAMERA_SETTINGS = {
 }
 
 
-class ImageProducer(object):
+class PollProducer(object):
+    WAIT_FOR_EMPTY_CHAMBER = 0
+    SNAPSHOT = 1
+    DEQUE_LENGTH = 10
+
     def __init__(self, input_stream, camera_settings):
         self.cap = cv2.VideoCapture(input_stream)
-        self.setup_camera(camera_settings)
+        self._setup_camera(camera_settings)
 
-    def setup_camera(self, camera_settings):
+    def _setup_camera(self, camera_settings):
         for option, value in camera_settings.items():
             self.cap.set(option, value)
 
-    def frame_generator(self, step=1, show_every_frame=False):
-        index = count()
+    def _frame_generator(self, step=1, live_display=False):
+        frame_counter = count()
         while True:
-            more, image = self.cap.read()
+            more, frame = self.cap.read()
             time.sleep(0.03)
             if not more:
                 return
-            if show_every_frame:
-                cv2.imshow('Live display', image)
+            if live_display:
+                cv2.imshow('Live display', frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     return
-            i = next(index)
-            if i % step == 0:
-                yield i, image
+            index = next(frame_counter)
+            if index % step == 0:
+                yield index, frame
 
-    def produce(self, pipe_parent):
-        for index, image in self.frame_generator(step=2, show_every_frame=True):
-            if index % 20 == 0: # Decide when to snapshot (poll recognition)
-                pipe_parent.send(image)
-                print('SENT image.')
+    def send_polls(self, pipe_parent):
+        trigger = PollProducer.SNAPSHOT
+        v_means = deque(maxlen=PollProducer.DEQUE_LENGTH)
+        for index, frame in self._frame_generator(step=2, live_display=True):
+            v_mean = np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:,:,2])
+            v_means.append(v_mean)
+            if trigger == PollProducer.SNAPSHOT and v_mean > 50 and np.sum(np.square(v_mean - np.array(v_means))) < 1:
+                pipe_parent.send(frame)
+                print('SENT frame.')
+                v_means.clear()
+                trigger = PollProducer.WAIT_FOR_EMPTY_CHAMBER
+            if trigger == PollProducer.WAIT_FOR_EMPTY_CHAMBER and v_mean < 1:
+                trigger = PollProducer.SNAPSHOT
         self.cap.release()
         pipe_parent.send('STOP')
 
 
-class ImageConsumer(object):
-    def consume(self, pipe_child):
+class PollConsumer(object):
+    def receive_polls(self, pipe_child):
         while True:
-            image = pipe_child.recv()
-            if image == 'STOP':
+            frame = pipe_child.recv()
+            if frame == 'STOP':
                 print("finished")
                 break
-            print("RECEIVED image, processing...")
-            cv2.imshow('Processing results', image)
-            cv2.waitKey(1)
+            print("RECEIVED a poll, processing...")
             for _ in range(100000):
                 continue
-            print('Finished processing image.')
+            cv2.imshow('Proessed poll', frame)
+            cv2.waitKey(1)
+            print('Finished processing a poll.')
 
 
 class Pollster(object):
     def run(self, input_stream, camera_settings):
         pipe_parent, pipe_child = multiprocessing.Pipe()
 
-        producer = ImageProducer(input_stream, camera_settings)
-        consumer = ImageConsumer()
+        producer = PollProducer(input_stream, camera_settings)
+        consumer = PollConsumer()
 
-        producer_process = multiprocessing.Process(target=producer.produce, args=(pipe_child, ))
-        consumer_process = multiprocessing.Process(target=consumer.consume, args=(pipe_parent, ))
+        producer_process = multiprocessing.Process(target=producer.send_polls, args=(pipe_child, ))
+        consumer_process = multiprocessing.Process(target=consumer.receive_polls, args=(pipe_parent, ))
 
         producer_process.start()
         consumer_process.start()
