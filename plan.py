@@ -5,9 +5,7 @@ from itertools import count
 import numpy as np
 from collections import deque
 
-
 WEBCAM = 0
-# Not possible to set those values for webcam
 CAMERA_SETTINGS = {
     #cv2.CAP_PROP_BRIGHTNESS: 151,
     #cv2.CAP_PROP_CONTRAST: 43,
@@ -16,11 +14,15 @@ CAMERA_SETTINGS = {
     #cv2.CAP_PROP_EXPOSURE: -5,
 }
 
-
 class PollProducer(object):
     WAIT_FOR_EMPTY_CHAMBER = 0
     SNAPSHOT = 1
+
     DEQUE_LENGTH = 10
+    MAX_VARIANCE = 1
+    LOWER_BRIGHTNESS = 1
+    UPPER_BRIGHTNESS = 50
+    FRAME_STEP = 1
 
     def __init__(self, input_stream, camera_settings):
         self.cap = cv2.VideoCapture(input_stream)
@@ -48,15 +50,18 @@ class PollProducer(object):
     def send_polls(self, pipe_parent):
         trigger = PollProducer.SNAPSHOT
         v_means = deque(maxlen=PollProducer.DEQUE_LENGTH)
-        for index, frame in self._frame_generator(step=2, live_display=True):
+        for index, frame in self._frame_generator(step=PollProducer.FRAME_STEP, live_display=True):
             v_mean = np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:,:,2])
             v_means.append(v_mean)
-            if trigger == PollProducer.SNAPSHOT and v_mean > 50 and np.sum(np.square(v_mean - np.array(v_means))) < 1:
+            if all([trigger == PollProducer.SNAPSHOT,
+                    v_mean > PollProducer.UPPER_BRIGHTNESS,
+                    np.sum(np.square(v_mean - np.array(v_means))) < PollProducer.MAX_VARIANCE]):
                 pipe_parent.send(frame)
                 print('SENT frame.')
                 v_means.clear()
                 trigger = PollProducer.WAIT_FOR_EMPTY_CHAMBER
-            if trigger == PollProducer.WAIT_FOR_EMPTY_CHAMBER and v_mean < 1:
+            if all([trigger == PollProducer.WAIT_FOR_EMPTY_CHAMBER,
+                    v_mean < PollProducer.LOWER_BRIGHTNESS]):
                 trigger = PollProducer.SNAPSHOT
         self.cap.release()
         pipe_parent.send('STOP')
@@ -84,8 +89,10 @@ class Pollster(object):
         producer = PollProducer(input_stream, camera_settings)
         consumer = PollConsumer()
 
-        producer_process = multiprocessing.Process(target=producer.send_polls, args=(pipe_child, ))
-        consumer_process = multiprocessing.Process(target=consumer.receive_polls, args=(pipe_parent, ))
+        producer_process = multiprocessing.Process(target=producer.send_polls,
+                                                   args=(pipe_child, ))
+        consumer_process = multiprocessing.Process(target=consumer.receive_polls,
+                                                   args=(pipe_parent, ))
 
         producer_process.start()
         consumer_process.start()
@@ -97,4 +104,5 @@ class Pollster(object):
 
 
 if __name__ == '__main__':
-    Pollster().run(input_stream='src_video/after_cam_seq.avi', camera_settings=CAMERA_SETTINGS)
+    Pollster().run(input_stream='src_video/after_cam_seq.avi',
+                   camera_settings=CAMERA_SETTINGS)
