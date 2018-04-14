@@ -28,6 +28,7 @@ class ImageProducer(object):
         index = count()
         while True:
             more, image = self.cap.read()
+            time.sleep(0.03)
             if not more:
                 return
             if show_every_frame:
@@ -82,4 +83,4 @@ class Pollster(object):
 
 
 if __name__ == '__main__':
-    Pollster().run(input_stream=WEBCAM, camera_settings=CAMERA_SETTINGS)
+    Pollster().run(input_stream='src_video/after_cam_seq.avi', camera_settings=CAMERA_SETTINGS)
