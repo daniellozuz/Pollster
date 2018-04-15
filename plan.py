@@ -15,8 +15,8 @@ CAMERA_SETTINGS = {
 }
 
 class PollProducer(object):
-    WAIT_FOR_EMPTY_CHAMBER = 0
-    SNAPSHOT = 1
+    WAITING_FOR_EMPTY_CHAMBER = 0
+    WAITING_FOR_SNAPSHOT = 1
 
     DEQUE_LENGTH = 10
     MAX_VARIANCE = 1
@@ -48,21 +48,21 @@ class PollProducer(object):
                 yield index, frame
 
     def send_polls(self, pipe_parent):
-        trigger = PollProducer.SNAPSHOT
+        state = PollProducer.WAITING_FOR_SNAPSHOT
         v_means = deque(maxlen=PollProducer.DEQUE_LENGTH)
         for index, frame in self._frame_generator(step=PollProducer.FRAME_STEP, live_display=True):
             v_mean = np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:,:,2])
             v_means.append(v_mean)
-            if all([trigger == PollProducer.SNAPSHOT,
+            if all([state == PollProducer.WAITING_FOR_SNAPSHOT,
                     v_mean > PollProducer.UPPER_BRIGHTNESS,
-                    np.sum(np.square(v_mean - np.array(v_means))) < PollProducer.MAX_VARIANCE]):
+                    np.var(v_means) < PollProducer.MAX_VARIANCE]):
                 pipe_parent.send(frame)
                 print('SENT frame.')
                 v_means.clear()
-                trigger = PollProducer.WAIT_FOR_EMPTY_CHAMBER
-            if all([trigger == PollProducer.WAIT_FOR_EMPTY_CHAMBER,
+                state = PollProducer.WAITING_FOR_EMPTY_CHAMBER
+            if all([state == PollProducer.WAITING_FOR_EMPTY_CHAMBER,
                     v_mean < PollProducer.LOWER_BRIGHTNESS]):
-                trigger = PollProducer.SNAPSHOT
+                state = PollProducer.WAITING_FOR_SNAPSHOT
         self.cap.release()
         pipe_parent.send('STOP')
 
@@ -77,7 +77,7 @@ class PollConsumer(object):
             print("RECEIVED a poll, processing...")
             for _ in range(100000):
                 continue
-            cv2.imshow('Proessed poll', frame)
+            cv2.imshow('Processed poll', frame)
             cv2.waitKey(1)
             print('Finished processing a poll.')
 
