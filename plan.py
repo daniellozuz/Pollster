@@ -48,7 +48,7 @@ class PollProducer(object):
                 yield index, frame
 
     def send_polls(self, pipe_parent):
-        state = PollProducer.WAITING_FOR_SNAPSHOT
+        state = PollProducer.WAITING_FOR_EMPTY_CHAMBER
         v_means = deque(maxlen=PollProducer.DEQUE_LENGTH)
         for index, frame in self._frame_generator(step=PollProducer.FRAME_STEP, live_display=True):
             v_mean = np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:,:,2])
@@ -57,8 +57,6 @@ class PollProducer(object):
                     v_mean > PollProducer.UPPER_BRIGHTNESS,
                     np.var(v_means) < PollProducer.MAX_VARIANCE]):
                 pipe_parent.send(frame)
-                print('SENT frame.')
-                v_means.clear()
                 state = PollProducer.WAITING_FOR_EMPTY_CHAMBER
             if all([state == PollProducer.WAITING_FOR_EMPTY_CHAMBER,
                     v_mean < PollProducer.LOWER_BRIGHTNESS]):
@@ -68,26 +66,28 @@ class PollProducer(object):
 
 
 class PollConsumer(object):
+    def __init__(self, template):
+        self.template = cv2.imread(template)
+
     def receive_polls(self, pipe_child):
         while True:
             frame = pipe_child.recv()
             if frame == 'STOP':
-                print("finished")
+                print("No more polls.")
                 break
-            print("RECEIVED a poll, processing...")
-            for _ in range(100000):
-                continue
-            cv2.imshow('Processed poll', frame)
-            cv2.waitKey(1)
-            print('Finished processing a poll.')
+            self._analysis(frame)
+    
+    def _analysis(self, frame):
+        print('Template: ', self.template.shape)
+        print('Frame: ', frame.shape)
 
 
 class Pollster(object):
-    def run(self, input_stream, camera_settings):
+    def run(self, input_stream, camera_settings, template):
         pipe_parent, pipe_child = multiprocessing.Pipe()
 
         producer = PollProducer(input_stream, camera_settings)
-        consumer = PollConsumer()
+        consumer = PollConsumer(template)
 
         producer_process = multiprocessing.Process(target=producer.send_polls,
                                                    args=(pipe_child, ))
@@ -105,4 +105,5 @@ class Pollster(object):
 
 if __name__ == '__main__':
     Pollster().run(input_stream='src_video/after_cam_seq.avi',
-                   camera_settings=CAMERA_SETTINGS)
+                   camera_settings=CAMERA_SETTINGS,
+                   template='templates/tmp_template.png')
