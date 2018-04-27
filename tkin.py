@@ -7,7 +7,8 @@ from PIL import Image, ImageTk
 class Application(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
-        self.cap = cv2.VideoCapture(1)
+        self.cap = cv2.VideoCapture('src_video/OK_a_wzor_sekwencja.avi')
+        self.rectangles = []
         self.pack()
         self.create_widgets()
 
@@ -24,9 +25,12 @@ class Application(tk.Frame):
         self.live_footage.pack(padx=10, pady=10, side='left')
         self.live_footage.place(x=20, y=120, width=640, height=480)
 
-        self.snapshot = tk.Label(self.master)
+        self.snapshot = tk.Canvas(self.master, cursor='cross')
         self.snapshot.pack(padx=10, pady=10, side='left')
         self.snapshot.place(x=720, y=120, width=640, height=480)
+        self.snapshot.bind('<ButtonPress-1>', self.on_button_press)
+        self.snapshot.bind('<B1-Motion>', self.on_move_press)
+        self.snapshot.bind('<ButtonRelease-1>', self.on_button_release)
 
         self.quit = tk.Button(self, text="QUIT", fg="red",
                               command=root.destroy)
@@ -46,8 +50,24 @@ class Application(tk.Frame):
 
     def make_snapshot(self):
         print("Made snapshot.")
-        self.snapshot.imgtk = self.frame
-        self.snapshot.config(image=self.frame)
+        self.snapshot.copy_image = self.frame
+        self.snapshot.create_image(0, 0, anchor='nw', image=self.snapshot.copy_image)
+
+    def on_button_press(self, event):
+        print('Drawing at:', event.x, event.y)
+        self.start_x = event.x
+        self.start_y = event.y
+        self.rectangles.append(self.snapshot.create_rectangle(event.x, event.y, event.x, event.y, outline='red'))
+
+    def on_move_press(self, event):
+        curX = event.x
+        curY = event.y
+        self.snapshot.coords(self.rectangles[-1], self.start_x, self.start_y, curX, curY)
+
+    def on_button_release(self, event):
+        print('Rectangles:', self.rectangles)
+        for rectangle in self.rectangles:
+            print(self.snapshot.coords(rectangle))
 
 root = tk.Tk()
 root.geometry('1400x680+50+50')
