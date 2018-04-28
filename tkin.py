@@ -6,6 +6,8 @@ from PIL import Image, ImageTk
 import numpy as np
 import json
 import multiprocessing
+import time
+import os
 
 class Application(tk.Frame):
     WAITING_FOR_EMPTY_CHAMBER = 0
@@ -24,15 +26,6 @@ class Application(tk.Frame):
         self.pack()
         self.create_widgets()
         self.video_loop()
-        # pipe_target, pipe_source = multiprocessing.Pipe()
-        # producer_process = multiprocessing.Process(target=self.video_loop,
-        #                                            args=(pipe_source, ))
-        # consumer_process = multiprocessing.Process(target=self.poll_sink,
-        #                                            args=(pipe_target, ))
-        # producer_process.start()
-        # consumer_process.start()
-        # consumer_process.join()
-        # producer_process.join()
 
     def create_widgets(self):
         self.make_snapshot_button = tk.Button(self)
@@ -55,10 +48,10 @@ class Application(tk.Frame):
         self.start_pollster_button['command'] = self.start_pollster
         self.start_pollster_button.pack(side='top')
 
-        self.question_number = tk.Entry(root)
+        self.question_number = tk.Entry(self.master)
         self.question_number.pack(side='top')
 
-        self.template_name = tk.Entry(root)
+        self.template_name = tk.Entry(self.master)
         self.template_name.pack(side='top')
 
         self.live_footage = tk.Label(self.master)
@@ -72,7 +65,7 @@ class Application(tk.Frame):
         self.snapshot.bind('<B1-Motion>', self.on_move_press)
         self.snapshot.bind('<ButtonRelease-1>', self.on_button_release)
 
-        self.quit = tk.Button(self, text='QUIT', fg='red', command=root.destroy)
+        self.quit = tk.Button(self, text='QUIT', fg='red', command=self.master.destroy)
         self.quit.pack(side='bottom')
 
     def video_loop(self):
@@ -85,7 +78,7 @@ class Application(tk.Frame):
             self.live_footage.imgtk = self.imgtk
             self.live_footage.config(image=self.imgtk)
             if self.mode == Application.POLLING:
-                print('Sending poll to be measured for brightness.')
+                print(os.getpid(), 'Sending poll to be measured for brightness.')
                 self.pipe_source.send(frame)
                 # Place for sending it to another process responsible for calculating brightness (send it to poll consumer :-) )
         self.master.after(30, self.video_loop)
@@ -140,23 +133,34 @@ class PollRecogniser(object):
             if frame == 'STOP':
                 print("No more polls.")
                 break
-            print('Frame came.')
+            print(os.getpid(), 'Frame came.')
+
+def prod(pipe_source):
+    root = tk.Tk()
+    root.geometry('1400x780+50+50')
+    app = Application(pipe_source, master=root)
+    app.mainloop()
+
+def rec(pipe_target):
+    consumer = PollRecogniser()
+    consumer.receive_polls(pipe_target)
 
 
 pipe_target, pipe_source = multiprocessing.Pipe()
-root = tk.Tk()
-root.geometry('1400x780+50+50')
-app = Application(master=root, pipe_source=pipe_source)
-consumer = PollRecogniser()
-app_process = multiprocessing.Process(target=app.mainloop,
-                                      args=())
-consumer_process = multiprocessing.Process(target=consumer.receive_polls,
+# root = tk.Tk()
+# root.geometry('1400x780+50+50')
+# app = Application(pipe_source, master=root)
+# consumer = PollRecogniser()
+app_process = multiprocessing.Process(target=prod,
+                                      args=(pipe_source, ))
+consumer_process = multiprocessing.Process(target=rec,
                                            args=(pipe_target, ))
+
 app_process.start()
 consumer_process.start()
-consumer_process.join()
 app_process.join()
+consumer_process.join()
 
 # while True:
     # app.update()
-#app.mainloop()
+# app.mainloop()
