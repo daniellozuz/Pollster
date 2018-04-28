@@ -5,6 +5,7 @@ import cv2
 from PIL import Image, ImageTk
 import numpy as np
 import json
+import multiprocessing
 
 class Application(tk.Frame):
     WAITING_FOR_EMPTY_CHAMBER = 0
@@ -12,8 +13,9 @@ class Application(tk.Frame):
     TEMPLATE_CREATION = 0
     POLLING = 1
 
-    def __init__(self, master=None):
+    def __init__(self, pipe_source, master=None):
         super().__init__(master)
+        self.pipe_source = pipe_source
         self.state = Application.WAITING_FOR_EMPTY_CHAMBER
         self.mode = Application.TEMPLATE_CREATION
         self.cap = cv2.VideoCapture('src_video/OK_a_wzor_sekwencja.avi')
@@ -22,6 +24,15 @@ class Application(tk.Frame):
         self.pack()
         self.create_widgets()
         self.video_loop()
+        # pipe_target, pipe_source = multiprocessing.Pipe()
+        # producer_process = multiprocessing.Process(target=self.video_loop,
+        #                                            args=(pipe_source, ))
+        # consumer_process = multiprocessing.Process(target=self.poll_sink,
+        #                                            args=(pipe_target, ))
+        # producer_process.start()
+        # consumer_process.start()
+        # consumer_process.join()
+        # producer_process.join()
 
     def create_widgets(self):
         self.make_snapshot_button = tk.Button(self)
@@ -75,13 +86,14 @@ class Application(tk.Frame):
             self.live_footage.config(image=self.imgtk)
             if self.mode == Application.POLLING:
                 print('Sending poll to be measured for brightness.')
+                self.pipe_source.send(frame)
                 # Place for sending it to another process responsible for calculating brightness (send it to poll consumer :-) )
         self.master.after(30, self.video_loop)
     
     def start_pollster(self):
         if self.mode == Application.TEMPLATE_CREATION:
             self.mode = Application.POLLING
-            self.start_pollster_button.config(background='green')            
+            self.start_pollster_button.config(background='green')
         elif self.mode == Application.POLLING:
             self.mode = Application.TEMPLATE_CREATION
             self.start_pollster_button.config(background='red')
@@ -121,7 +133,30 @@ class Application(tk.Frame):
         for box in self.boxes:
             print(box['question'], self.snapshot.coords(box['id']))
 
+class PollRecogniser(object):
+    def receive_polls(self, pipe_target):
+        while True:
+            frame = pipe_target.recv()
+            if frame == 'STOP':
+                print("No more polls.")
+                break
+            print('Frame came.')
+
+
+pipe_target, pipe_source = multiprocessing.Pipe()
 root = tk.Tk()
 root.geometry('1400x780+50+50')
-app = Application(master=root)
-app.mainloop()
+app = Application(master=root, pipe_source=pipe_source)
+consumer = PollRecogniser()
+app_process = multiprocessing.Process(target=app.mainloop,
+                                      args=())
+consumer_process = multiprocessing.Process(target=consumer.receive_polls,
+                                           args=(pipe_target, ))
+app_process.start()
+consumer_process.start()
+consumer_process.join()
+app_process.join()
+
+# while True:
+    # app.update()
+#app.mainloop()
