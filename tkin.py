@@ -8,19 +8,25 @@ import json
 import multiprocessing
 import time
 import os
+from collections import deque
 
 class Application(tk.Frame):
     WAITING_FOR_EMPTY_CHAMBER = 0
     WAITING_FOR_NEXT_POLL = 1
     TEMPLATE_CREATION = 0
     POLLING = 1
+    DEQUE_LENGTH = 40
+    MAX_VARIANCE = 2
+    LOWER_BRIGHTNESS = 5
+    UPPER_BRIGHTNESS = 80
 
     def __init__(self, pipe_source, master=None):
         super().__init__(master)
+        self.v_means = deque(maxlen=Application.DEQUE_LENGTH)
         self.pipe_source = pipe_source
         self.state = Application.WAITING_FOR_EMPTY_CHAMBER
         self.mode = Application.TEMPLATE_CREATION
-        self.cap = cv2.VideoCapture('src_video/OK_a_wzor_sekwencja.avi')
+        self.cap = cv2.VideoCapture('whole_video/all.avi')
         self.boxes = []
         self.box = {}
         self.pack()
@@ -65,8 +71,13 @@ class Application(tk.Frame):
         self.snapshot.bind('<B1-Motion>', self.on_move_press)
         self.snapshot.bind('<ButtonRelease-1>', self.on_button_release)
 
-        self.quit = tk.Button(self, text='QUIT', fg='red', command=self.master.destroy)
-        self.quit.pack(side='bottom')
+        self.quit_button = tk.Button(self, text='QUIT', fg='red', command=self.quit)
+        self.quit_button.pack(side='bottom')
+
+    def quit(self):
+        self.pipe_source.send('STOP')
+        self.master.destroy()
+        print('Thank you for using Pollster.')
 
     def video_loop(self):
         ret, frame = self.cap.read()
@@ -78,10 +89,22 @@ class Application(tk.Frame):
             self.live_footage.imgtk = self.imgtk
             self.live_footage.config(image=self.imgtk)
             if self.mode == Application.POLLING:
-                print(os.getpid(), 'Sending poll to be measured for brightness.')
-                self.pipe_source.send(frame)
-                # Place for sending it to another process responsible for calculating brightness (send it to poll consumer :-) )
-        self.master.after(30, self.video_loop)
+                v_mean = np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:,:,2])
+                self.v_means.append(v_mean)
+                if all([self.state == Application.WAITING_FOR_NEXT_POLL,
+                        v_mean > Application.UPPER_BRIGHTNESS,
+                        np.var(self.v_means) < Application.MAX_VARIANCE]):
+                    print(os.getpid(), 'Sending poll to be measured for brightness.')
+                    self.pipe_source.send(frame)
+                    self.state = Application.WAITING_FOR_EMPTY_CHAMBER
+                if all([self.state == Application.WAITING_FOR_EMPTY_CHAMBER,
+                        v_mean < Application.LOWER_BRIGHTNESS]):
+                    self.state = Application.WAITING_FOR_NEXT_POLL
+            else:
+                self.v_means.clear()
+        else:
+            self.pipe_source.send('STOP')
+        self.master.after(20, self.video_loop)
     
     def start_pollster(self):
         if self.mode == Application.TEMPLATE_CREATION:
@@ -131,36 +154,30 @@ class PollRecogniser(object):
         while True:
             frame = pipe_target.recv()
             if frame == 'STOP':
-                print("No more polls.")
+                print('Stopping poll recognition.')
                 break
             print(os.getpid(), 'Frame came.')
 
-def prod(pipe_source):
+def run_application(pipe_source):
     root = tk.Tk()
     root.geometry('1400x780+50+50')
     app = Application(pipe_source, master=root)
     app.mainloop()
 
-def rec(pipe_target):
+def run_recogniser(pipe_target):
     consumer = PollRecogniser()
     consumer.receive_polls(pipe_target)
 
 
-pipe_target, pipe_source = multiprocessing.Pipe()
-# root = tk.Tk()
-# root.geometry('1400x780+50+50')
-# app = Application(pipe_source, master=root)
-# consumer = PollRecogniser()
-app_process = multiprocessing.Process(target=prod,
-                                      args=(pipe_source, ))
-consumer_process = multiprocessing.Process(target=rec,
-                                           args=(pipe_target, ))
+if __name__ == '__main__':
+    pipe_target, pipe_source = multiprocessing.Pipe()
 
-app_process.start()
-consumer_process.start()
-app_process.join()
-consumer_process.join()
+    app_process = multiprocessing.Process(target=run_application,
+                                          args=(pipe_source, ))
+    consumer_process = multiprocessing.Process(target=run_recogniser,
+                                               args=(pipe_target, ))
 
-# while True:
-    # app.update()
-# app.mainloop()
+    app_process.start()
+    consumer_process.start()
+    app_process.join()
+    consumer_process.join()
