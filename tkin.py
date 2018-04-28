@@ -2,7 +2,7 @@
 
 import tkinter as tk
 import cv2
-from PIL import Image, ImageTk
+import PIL
 import numpy as np
 import json
 
@@ -14,12 +14,13 @@ class Application(tk.Frame):
         self.box = {}
         self.pack()
         self.create_widgets()
+        self.video_loop()
 
     def create_widgets(self):
-        self.snapshot_button = tk.Button(self)
-        self.snapshot_button["text"] = "Make snapshot"
-        self.snapshot_button["command"] = self.make_snapshot
-        self.snapshot_button.pack(side="top")
+        self.make_snapshot_button = tk.Button(self)
+        self.make_snapshot_button["text"] = "Make snapshot"
+        self.make_snapshot_button["command"] = self.make_snapshot
+        self.make_snapshot_button.pack(side="top")
 
         self.question_number = tk.Entry(root)
         self.question_number.pack(side="top")
@@ -48,53 +49,47 @@ class Application(tk.Frame):
         self.snapshot.bind('<B1-Motion>', self.on_move_press)
         self.snapshot.bind('<ButtonRelease-1>', self.on_button_release)
 
-        self.quit = tk.Button(self, text="QUIT", fg="red",
-                              command=root.destroy)
+        self.quit = tk.Button(self, text="QUIT", fg="red", command=root.destroy)
         self.quit.pack(side="bottom")
-        self.video_loop()
 
     def video_loop(self):
         ret, frame = self.cap.read()
         if ret:
-            self.original_frame = frame
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-            frame = Image.fromarray(frame)
-            frame = ImageTk.PhotoImage(image=frame)
             self.frame = frame
-            self.live_footage.imgtk = frame
-            self.live_footage.config(image=frame)
+            self.imgtk = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+            self.imgtk = PIL.Image.fromarray(self.imgtk)
+            self.imgtk = PIL.ImageTk.PhotoImage(image=self.imgtk)
+            self.live_footage.imgtk = self.imgtk
+            self.live_footage.config(image=self.imgtk)
         self.master.after(30, self.video_loop)
 
     def make_snapshot(self):
-        print("Made snapshot.")
-        self.snapshot.copy_image = self.frame
+        self.template_image = self.frame
+        self.snapshot.copy_image = self.imgtk
         self.snapshot.create_image(0, 0, anchor='nw', image=self.snapshot.copy_image)
 
     def remove_last_box(self):
         if self.boxes:
             self.snapshot.delete(self.boxes[-1]['id'])
             self.boxes.pop()
-            print('Removed box')
+            print('Last box removed.')
         
     def save_template(self):
-        print('Saving template')
-        print(self.template_name.get())
-        cv2.imwrite('templates/{}.png'.format(self.template_name.get()), self.original_frame)
+        cv2.imwrite('templates/{}.png'.format(self.template_name.get()), self.template_image)
         with open('templates/{}.txt'.format(self.template_name.get()), 'w') as boxes_file:
             json.dump(self.boxes, boxes_file, indent=2)
+        print('Template saved.')
 
     def on_button_press(self, event):
-        print('Question:', self.question_number.get())
-        print('Drawing at:', event.x, event.y)
         self.start_x = event.x
         self.start_y = event.y
         self.box['question'] = self.question_number.get()
         self.box['id'] = self.snapshot.create_rectangle(event.x, event.y, event.x, event.y, outline='red')
 
     def on_move_press(self, event):
-        curX = event.x
-        curY = event.y
-        self.snapshot.coords(self.box['id'], self.start_x, self.start_y, curX, curY)
+        cursor_x = event.x
+        cursor_y = event.y
+        self.snapshot.coords(self.box['id'], self.start_x, self.start_y, cursor_x, cursor_y)
 
     def on_button_release(self, event):
         self.box['coordinates'] = self.snapshot.coords(self.box['id'])
