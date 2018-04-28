@@ -3,12 +3,15 @@
 import tkinter as tk
 import cv2
 from PIL import Image, ImageTk
+import numpy as np
+import json
 
 class Application(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.cap = cv2.VideoCapture('src_video/OK_a_wzor_sekwencja.avi')
-        self.rectangles = []
+        self.boxes = []
+        self.box = {}
         self.pack()
         self.create_widgets()
 
@@ -53,6 +56,7 @@ class Application(tk.Frame):
     def video_loop(self):
         ret, frame = self.cap.read()
         if ret:
+            self.original_frame = frame
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
             frame = Image.fromarray(frame)
             frame = ImageTk.PhotoImage(image=frame)
@@ -67,32 +71,37 @@ class Application(tk.Frame):
         self.snapshot.create_image(0, 0, anchor='nw', image=self.snapshot.copy_image)
 
     def remove_last_box(self):
-        if self.rectangles:
-            self.snapshot.delete(self.rectangles[-1][1])
-            self.rectangles.pop()
+        if self.boxes:
+            self.snapshot.delete(self.boxes[-1]['id'])
+            self.boxes.pop()
             print('Removed box')
         
     def save_template(self):
         print('Saving template')
         print(self.template_name.get())
-        # Add imwrite + metadata (boxes)
+        cv2.imwrite('templates/{}.png'.format(self.template_name.get()), self.original_frame)
+        with open('templates/{}.txt'.format(self.template_name.get()), 'w') as boxes_file:
+            json.dump(self.boxes, boxes_file, indent=2)
 
     def on_button_press(self, event):
         print('Question:', self.question_number.get())
         print('Drawing at:', event.x, event.y)
         self.start_x = event.x
         self.start_y = event.y
-        self.rectangles.append((self.question_number.get(), self.snapshot.create_rectangle(event.x, event.y, event.x, event.y, outline='red')))
+        self.box['question'] = self.question_number.get()
+        self.box['id'] = self.snapshot.create_rectangle(event.x, event.y, event.x, event.y, outline='red')
 
     def on_move_press(self, event):
         curX = event.x
         curY = event.y
-        self.snapshot.coords(self.rectangles[-1][1], self.start_x, self.start_y, curX, curY)
+        self.snapshot.coords(self.box['id'], self.start_x, self.start_y, curX, curY)
 
     def on_button_release(self, event):
-        print('Rectangles:', self.rectangles)
-        for question_number, rectangle in self.rectangles:
-            print(question_number, self.snapshot.coords(rectangle))
+        self.box['coordinates'] = self.snapshot.coords(self.box['id'])
+        self.boxes.append(self.box.copy())
+        print('boxes:', self.boxes)
+        for box in self.boxes:
+            print(box['question'], self.snapshot.coords(box['id']))
 
 root = tk.Tk()
 root.geometry('1400x780+50+50')
