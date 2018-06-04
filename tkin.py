@@ -87,18 +87,26 @@ def fixture (img, low, up):
             minx = box[i,1]
             indeks = i
     if(box[indeks,0] <200):
-        x =(box[3, 1] - box [2, 1])/(box[2,0]-box[3,0]) 
+        if ((box[2, 0]-box[3,0])==0):
+            kat = 0
+        else:
+            x =(box[3, 1] - box [2, 1])/(box[2,0]-box[3,0]) 
+            kat = math.atan(x)
+            kat = np.degrees(kat)
     else:
-        x =(box[0, 0] - box [1, 0])/(box[0,1]-box[1,1])
-    kat = math.atan(x)
-    kat = np.degrees(kat)
-    
+        if ((box[2, 0]-box[3,0])==0):
+            kat = 0
+        else:
+            x =(box[0, 0] - box [1, 0])/(box[0,1]-box[1,1])
+            kat = math.atan(x)
+            kat = np.degrees(kat)
+            
     rows = I.shape[0]
     cols = I.shape[1]
     M = cv2.getRotationMatrix2D((cols/2,rows/2),-kat,1)
     I = cv2.warpAffine(I,M,(cols,rows))
 
-    if(box[indeks,0] >200):
+    if(box[indeks,0] < 200):
         X= (box[0, 0] + box [1, 0])/2
         Y= (box[1,1]+box[2,1])/2
         X2= (box[2,0]+box[3,0])/2 
@@ -123,8 +131,9 @@ def fixture (img, low, up):
 def find_templates (img_gray, edge_min, edge_max, template_treshold, template): # tu dodatkowo wejdzie : template
 # przykładowe parametry: edge_min = 100 , edge_max = 200, template_treshold = 0,5
 # funkcja zwraca unikatową listę wykryć wzoru 
-
+    print('img_gray', img_gray)
     edges = cv2.Canny(img_gray,edge_min,edge_max)
+    print(edges)
     img_gray = np.uint8(edges)
 
     w, h = template.shape[::-1]
@@ -222,9 +231,9 @@ def marker_center(cnt):
 def find_fields(img, maska, centers):
     
     #preprocessing obrazu
-    cv2.equalizeHist( img, img );
-    ret,img = cv2.threshold(img,40,150,0)
-    kernel = np.ones((4,4),np.uint8)
+    cv2.equalizeHist(img, img)
+    ret, img = cv2.threshold(img, 40, 150, 0)
+    kernel = np.ones((4, 4), np.uint8)
     img = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
     
     #Wycięcie obszarów do detekcji:
@@ -381,13 +390,14 @@ def main(frame):
     
     #z ramki wycinana jest sama ankieta, niwelacja przesunięć kątowych 
     img,I_cnt = fixture (I, 70, 255)
+    print(img)
     # cv2.imshow("Wycieta ankieta", np.uint8(img))
     # cv2.imshow("cnt", np.uint8(I_cnt))
     img_gray =  cv2.cvtColor(np.uint8(img), cv2.COLOR_BGR2GRAY)
 
     #nalezy podać ciezkę do wzoru znacznika pozycji 
     loc = []
-    template = cv2.imread('templates/tmp.png')
+    template = cv2.imread('templates/pozycja.png')
     template =  cv2.cvtColor(np.uint8(template), cv2.COLOR_BGR2GRAY)
     w, h = template.shape
     #wzory są znajdowane, a następnie precyzyjnie okrelane są ich srodki (centers)
@@ -449,8 +459,8 @@ class Application(tk.Frame):
         self.pipe_source = pipe_source
         self.state = Application.WAITING_FOR_EMPTY_CHAMBER
         self.mode = Application.TEMPLATE_CREATION
-        self.cap = cv2.VideoCapture(1)
-        self._setup_camera(CAMERA_SETTINGS)
+        self.cap = cv2.VideoCapture('whole_video/okank.avi')
+        # self._setup_camera(CAMERA_SETTINGS)
         self.boxes = []
         self.box = {}
         self.pack()
@@ -583,6 +593,8 @@ class PollRecogniser(object):
         while True:
             frame = pipe_target.recv()
             print(frame)
+            # cv2.imshow('dupa', frame)
+            # cv2.waitKey(10000)
             punkty, kody = main(frame)
             print(punkty, kody)
             if frame == 'STOP':
