@@ -106,7 +106,7 @@ def fixture (img, low, up):
     M = cv2.getRotationMatrix2D((cols/2,rows/2),-kat,1)
     I = cv2.warpAffine(I,M,(cols,rows))
 
-    if(box[indeks,0] < 200):
+    if(box[indeks,0] > 200):
         X= (box[0, 0] + box [1, 0])/2
         Y= (box[1,1]+box[2,1])/2
         X2= (box[2,0]+box[3,0])/2 
@@ -459,7 +459,7 @@ class Application(tk.Frame):
         self.pipe_source = pipe_source
         self.state = Application.WAITING_FOR_EMPTY_CHAMBER
         self.mode = Application.TEMPLATE_CREATION
-        self.cap = cv2.VideoCapture('whole_video/okank.avi')
+        self.cap = cv2.VideoCapture('whole_video/anka.avi')
         # self._setup_camera(CAMERA_SETTINGS)
         self.boxes = []
         self.box = {}
@@ -593,8 +593,8 @@ class PollRecogniser(object):
         while True:
             frame = pipe_target.recv()
             print(frame)
-            # cv2.imshow('dupa', frame)
-            # cv2.waitKey(10000)
+            cv2.imshow('dupa', frame)
+            cv2.waitKey(2000)
             punkty, kody = main(frame)
             print(punkty, kody)
             if frame == 'STOP':
@@ -625,5 +625,3 @@ if __name__ == '__main__':
     consumer_process.start()
     app_process.join()
     consumer_process.join()
-
-
