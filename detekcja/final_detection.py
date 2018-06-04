@@ -369,10 +369,9 @@ def kod_detection (kod, kod_mask):
     
     return kody
 
-def main(nazwa):
+def main(frame):
     #podawana jest sciezka do pliku z nagraniem sekwencji 
-    I=CaptureFrame(nazwa, 300, 130)
-    I=I[0]
+    I=frame
     #złapana ramka jest wywietlana
     cv2.imshow("ankieta", np.uint8(I))
     cv2.waitKey(10)
@@ -385,7 +384,7 @@ def main(nazwa):
 
     #nalezy podać ciezkę do wzoru znacznika pozycji 
     loc = []
-    template = cv2.imread('C:\\Users\kSwoboda\\Desktop\\pozycja.png')
+    template = cv2.imread('templates/tmp.png')
     template =  cv2.cvtColor(np.uint8(template), cv2.COLOR_BGR2GRAY)
     w, h = template.shape
     #wzory są znajdowane, a następnie precyzyjnie okrelane są ich srodki (centers)
@@ -398,7 +397,7 @@ def main(nazwa):
     #Następnie wczytywana jest maska pól z odpowiedziami 
     cv2.drawContours(img, cnt, -1, (255,255,255), 1)
     cv2.imshow('wynik',np.uint8(img))
-    maska = cv2.imread('C:\\Users\kSwoboda\\Desktop\\mask.png')
+    maska = cv2.imread('templates/mask.png')
     maska =  cv2.cvtColor(np.uint8(maska), cv2.COLOR_BGR2GRAY)
         
     #Wycinam pola odpowiedzi z obrazu na podstawie maski 
